@@ -1,0 +1,60 @@
+(1)Brief introduction
+
+This board is referred to as '10-DOF' (10 Degrees of Freedom) 
+because it integrates two sensors: the MPU9255 (or MPU9250), 
+which provides 9-axis data—comprising a 3-axis accelerometer, 
+a 3-axis gyroscope, and a 3-axis magnetometer (internally an AK8963 chip)
+
+
+And the BMP280, which provides 1-axis data for barometric pressure and 
+temperature, primarily used for altitude calculations. The name '10-DOF' 
+is derived from the sum of these 10 axes ($9 + 1 = 10$).
+
+(2) Translation
+*gyroscope 陀螺儀
+
+(3) Some facts about MPU 9250
+
+    Full-Scale Range (FSR) and Bit Mapping
+    
+    One common point of confusion is why a 16g range is represented by 
+    the value 3 (0b11). This is a classic example of Binary Encoding for 
+    efficiency.The MPU-9250 uses a 2-bit field in the ACCEL_CONFIG register 
+    to select the "ruler" size for the accelerometer
+
+    0b00  0  +-2g  16384
+    0b01  1  +-4g  8192
+    0b10  2  +-8g  4096
+    0b11  3  +-16g  2048
+
+    By using only 2 bits to represent 4 states, the chip saves precious register 
+    space. The hardware interprets the value 3 as a command to switch the internal
+    analog amplifiers to their lowest gain setting, allowing the sensor to measure 
+    high-impact forces without "clipping" (saturating) the signal.
+
+
+
+    The Math of Sensitivity 
+
+    Raw Data to Physical UnitsThe MPU-9250 utilizes a 16-bit ADC 
+    (Analog-to-Digital Converter), meaning it maps the measured force 
+    into a range of $2^{16}$ ($65,536$) discrete steps. Since the data 
+    is signed, the raw output ranges from -32,768 to +32,767.To convert 
+    the raw integer into a "G-force" value ($g$), we use the Sensitivity 
+    Scale Factor:
+
+    g = Raw Output / Sensitivity Factor
+
+    +-2g : A small vibration produces a large change in the raw number 
+           (High Resolution) ---> 16384 LSB /g
+    +-16g : It takes a massive impact to move the raw number 
+           (Low Resolution, High Range) ---> 2048 LSB / g
+   
+    LSB : 最小測量單位 -->
+    
+    在做實驗時，你可能會發現即使感測器放在桌上不動，
+    讀到的數值也會在 16380, 16385, 16382 之間跳動。
+    我們通常稱這叫 「LSB 跳動」 或 「1-LSB 雜訊」。
+    這代表環境中的微小震動或電路雜訊干擾了最靈敏的那幾位元。
+
+    
