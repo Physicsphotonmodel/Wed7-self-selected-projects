@@ -1,0 +1,8 @@
+// 每 16 毫秒往左歪 0.5 度
+setInterval(() => testSideMovement("left", 0.5, "roll"), 16);
+
+// 模擬低頭 30 度
+testVerticalMovement("nod", 30);
+
+// 3秒後模擬抬頭 10 度
+setTimeout(() => testVerticalMovement("tiltBack", 10), 3000);
