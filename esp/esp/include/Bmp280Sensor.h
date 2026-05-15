@@ -5,17 +5,15 @@
 #include <Wire.h>
 #include <Adafruit_BMP280.h>
 
-// GY-91 上 BMP280 的預設 I2C 位址 
-// (SAO 接地/懸空時通常是 0x76；SAO 接 3.3V 時會變成 0x77)
-#define BMP280_ADDR_A 0x76 
+#define BMP280_ADDR_LEFT  0x76 // SAO 懸空或接地
+#define BMP280_ADDR_RIGHT 0x77 // SAO 接 3.3V
 
 class Bmp280Sensor {
 public:
-    Bmp280Sensor(uint8_t i2cAddress = BMP280_ADDR_A);
+    Bmp280Sensor(uint8_t i2cAddress);
 
     bool init();
 
-    // 讀取真實氣壓 (單位：Pa，如果要百帕 hPa 要自行除以 100)
     float readPressure();
 
     float readTemperature();
