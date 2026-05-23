@@ -82,3 +82,12 @@ void ble_loop() {
       oldDeviceConnected = deviceConnected;
   }
 }
+void ble_log(String message) {
+  Serial.println(message);
+  
+  if (deviceConnected) {
+    pCharacteristic->setValue((uint8_t*)message.c_str(), message.length());
+    pCharacteristic->notify();
+    delay(10);
+  }
+}

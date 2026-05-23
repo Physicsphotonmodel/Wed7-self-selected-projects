@@ -8,5 +8,5 @@
 
 void ble_setup();
 void ble_loop();
-
+void ble_log(String message);
 #endif
