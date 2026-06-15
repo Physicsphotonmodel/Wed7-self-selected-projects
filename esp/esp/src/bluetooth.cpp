@@ -4,100 +4,113 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
+// å®šç¾© UUID
+const char* SERVICE_UUID        = "4fafc201-1fb5-454e-8a2c-01412e646461";
+const char* CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
-char latest_command = '\0'; // Àx¦s¤â¾÷¶Ç¨Óªº³Ì·s«ü¥O
+String latest_string_command = "";
 
-// ³B²z³s½uª¬ºAªº¦^©I
+
+char latest_command = '\0'; // å„²å­˜æ‰‹æ©Ÿéä¾†çš„æœ€æ–°æŒ‡ä»¤
+
+// è™•ç†é€£ç·šç‹€æ…‹çš„å›æ’¥å‡½å¼
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
-      deviceConnected = true;
-      Serial.println("nRF Connect ¤w³s½u¡I");
-    };
+        deviceConnected = true;
+        Serial.println("\n[BLE INFO] æ‰‹æ©Ÿ nRF Connect å·²æˆåŠŸé€£ç·šï¼");
+    }
 
     void onDisconnect(BLEServer* pServer) {
-      deviceConnected = false;
-      Serial.println("nRF Connect ¤wÂ_½u¡I");
+        deviceConnected = false;
+        Serial.println("\n[BLE INFO] æ‰‹æ©Ÿ nRF Connect å·²æ–·é–‹é€£ç·šï¼");
     }
 };
 
-// ? ·s¼W¡G³B²z¤â¾÷¡u¼g¤J¡v«ü¥Oªº¦^©I
+// è™•ç†æ‰‹æ©Ÿå¯«å…¥æŒ‡ä»¤çš„å›æ’¥å‡½å¼
 class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
         std::string rxValue = pCharacteristic->getValue();
         if (rxValue.length() > 0) {
-            // ¥u§ì¨ú²Ä¤@­Ó¦r¤¸¡]¨Ò¦p '1' ©Î '0'¡^
-            latest_command = rxValue[0]; 
-            Serial.print("ÂÅ¤ú¦¬¨ì­ì©l°T¸¹: ");
-            Serial.println(latest_command);
+            // é—œéµï¼šå°‡æ•´å€‹å­—ä¸²è½‰æˆ Stringï¼Œä¸è¦åªå–ç¬¬ä¸€å€‹å­—å…ƒï¼
+            latest_string_command = String(rxValue.c_str()); 
+            Serial.print("\n[BLE RECEIVE] æ”¶åˆ°å­—ä¸²è¼¸å…¥: ");
+            Serial.println(latest_string_command);
         }
     }
 };
 
 void ble_setup() {
-  Serial.println("BLE ±Ò°Ê¤¤...");
-  BLEDevice::init("Smart_Neck_Pillow");
-  BLEDevice::setMTU(512); 
+    Serial.println("[INFO] BLE å•Ÿå‹•ä¸­...");
+    BLEDevice::init("Smart_Pillow_System");
+    BLEDevice::setMTU(512); 
 
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
+    pServer = BLEDevice::createServer();
+    pServer->setCallbacks(new MyServerCallbacks());
 
-  BLEService *pService = pServer->createService(SERVICE_UUID);
+    BLEService *pService = pServer->createService(SERVICE_UUID);
 
-  // ? ¥[¤J PROPERTY_WRITE Åv­­
-  pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_WRITE  |
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
+    pCharacteristic = pService->createCharacteristic(
+                        CHARACTERISTIC_UUID,
+                        BLECharacteristic::PROPERTY_READ   |
+                        BLECharacteristic::PROPERTY_WRITE  |
+                        BLECharacteristic::PROPERTY_NOTIFY
+                      );
 
-  pCharacteristic->addDescriptor(new BLE2902());
-  // ? ¸j©w±µ¦¬«ü¥Oªº¦^©I¨ç¦¡
-  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
-  
-  pService->start();
-  
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x0);
-  BLEDevice::startAdvertising();
-  
-  Serial.println("BLE ¼s¼½¤w±Ò°Ê¡Aµ¥«İ³s½u...");
+    pCharacteristic->addDescriptor(new BLE2902());
+    pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+    
+    pService->start();
+    
+    BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
+    pAdvertising->addServiceUUID(SERVICE_UUID);
+    pAdvertising->setScanResponse(false);
+    pAdvertising->setMinPreferred(0x0);
+    BLEDevice::startAdvertising();
+    
+    Serial.println("[INFO] è—ç‰™å»£æ’­å·²é–‹å•Ÿï¼Œç­‰å¾…æ‰‹æ©Ÿé€£ç·š...");
 }
 
 void ble_loop() {
-  if (!deviceConnected && oldDeviceConnected) {
-      delay(500); 
-      pServer->startAdvertising(); 
-      Serial.println("BLE ­«·s¶}©l¼s¼½...");
-      oldDeviceConnected = deviceConnected;
-  }
-  if (deviceConnected && !oldDeviceConnected) {
-      oldDeviceConnected = deviceConnected;
-  }
+    if (!deviceConnected && oldDeviceConnected) {
+        delay(500); 
+        pServer->startAdvertising(); 
+        Serial.println("[BLE INFO] é‡æ–°é–‹å•Ÿè—ç‰™å»£æ’­...");
+        oldDeviceConnected = deviceConnected;
+    }
+    if (deviceConnected && !oldDeviceConnected) {
+        oldDeviceConnected = deviceConnected;
+    }
 }
 
 void ble_log(String message) {
-  Serial.println(message);
-  if (deviceConnected) {
-    pCharacteristic->setValue((uint8_t*)message.c_str(), message.length());
-    pCharacteristic->notify();
-    delay(10); 
-  }
+    Serial.println(message);
+    if (deviceConnected) {
+        pCharacteristic->setValue((uint8_t*)message.c_str(), message.length());
+        pCharacteristic->notify();
+        delay(10); 
+    }
 }
 
 bool is_ble_connected() {
     return deviceConnected;
 }
 
-// µ¹¥Dµ{¦¡©I¥s¥Îªº¡GÅª¨ú«ü¥O«á¥ß¨è²MªÅ¡AÁ×§K­«½Æ°õ¦æ
+String get_ble_string_command() {
+    String cmd = latest_string_command;
+    latest_string_command = ""; // è®€å–å¾Œæ¸…ç©º
+    return cmd;
+}
+
 char get_ble_command() {
+
+    if (latest_string_command.length() > 0) return latest_string_command[0];
+    
     char cmd = latest_command;
-    latest_command = '\0'; 
+    latest_command = '\0'; // è®€å–å¾Œæ¸…ç©ºï¼Œé¿å…é‡è¤‡è§¸ç™¼
     return cmd;
 }

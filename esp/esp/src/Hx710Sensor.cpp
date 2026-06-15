@@ -1,9 +1,17 @@
 #include "Hx710Sensor.h"
 
-Hx710Sensor::Hx710Sensor(uint8_t outPin, uint8_t sckPin) {
+// ä¿®æ­£ï¼šåœ¨å»ºæ§‹å­ä¸­ä¸€ä½µåˆå§‹åŒ–æˆå“¡è®Šæ•¸èˆ‡ PID å…§éƒ¨ç‹€æ…‹
+Hx710Sensor::Hx710Sensor(uint8_t outPin, uint8_t sckPin, float kp, float ki, float kd) {
     _outPin = outPin;
     _sckPin = sckPin;
     _offset = 0;
+    
+    // åˆå§‹åŒ– PID åƒæ•¸èˆ‡ç‹€æ…‹
+    _kp = kp;
+    _ki = ki;
+    _kd = kd;
+    _integral = 0;
+    _previousError = 0;
 }
 
 void Hx710Sensor::begin() {
@@ -34,13 +42,13 @@ long Hx710Sensor::readRaw() {
         }
     }
 
-    // µo°e²Ä 25 ­Ó®É¯ß (10Hz ¼Ò¦¡)
+    // ç™¼é€ç¬¬ 25 å€‹æ™‚è„ˆè„ˆè¡ (è¨­å®š HX710 å·¥ä½œæ¨¡å¼ç‚º 10Hz è¼¸å…¥)
     digitalWrite(_sckPin, HIGH);
     delayMicroseconds(1);
     digitalWrite(_sckPin, LOW);
     delayMicroseconds(1);
 
-    // ? ­×¥¿¡G¼Ğ·Çªº 24-bit Âà 32-bit ¤G¸É¼ÆÂà´« (¸Ñ¨M¼Æ­È¶Ã¸õ)
+    // è™•ç†äºŒé€²ä½è£œæ•¸ï¼šå°‡ 24-bit æœ‰è™Ÿæ•´æ•¸æ“´å±•ç‚º 32-bit æœ‰è™Ÿæ•´æ•¸ (è§£æ±ºè² æ•¸å•é¡Œ)
     if (count & 0x800000) {
         count |= 0xFF000000; 
     }
@@ -48,8 +56,9 @@ long Hx710Sensor::readRaw() {
     return count;
 }
 
-// ? ·s¼W¡G§¡­ÈÂoªi¾¹ (§í¨î°ªÀWÂø°T)
+// è®€å–å¤šæ¬¡åŸå§‹å€¼ä¸¦è¨ˆç®—å¹³å‡å€¼ (ç”¨ä¾†æ¿¾é™¤é«˜é »é›œè¨Š)
 long Hx710Sensor::readAverage(uint8_t times) {
+    if (times == 0) times = 1; // é˜²å‘†æ©Ÿåˆ¶
     long sum = 0;
     for (int i = 0; i < times; i++) {
         sum += readRaw();
@@ -58,20 +67,46 @@ long Hx710Sensor::readAverage(uint8_t times) {
 }
 
 void Hx710Sensor::tare(uint8_t times) {
-    // ¥á±ó«e´Xµ§¤£Ã­©wªº¸ê®Æ
+    // æ¨æ£„å‰å…©æ¬¡è®€å–ï¼Œç¢ºä¿æ™¶ç‰‡è¼¸å‡ºå·²ç©©å®š
     readRaw(); readRaw();
-    // Åª¨ú¥­§¡­È§@¬°·sªº 0 °ò·Ç½u
+    // è®€å–ç•¶å‰å¹³å‡å€¼ä½œç‚ºæ­¸é›¶åŸºæº–ç·š
     _offset = readAverage(times);
 }
 
 long Hx710Sensor::getRelativeValue() {
-    // 1. ¨ú±o·í¤U¹LÂo«áªº¥­§¡­È
+    // 1. ç²å–å¤šæ¬¡æ¿¾æ³¢å¾Œçš„åŸå§‹è®€å€¼
     long currentRaw = readAverage(5); 
     
-    // 2. ¦©°£ªì©l¤j®ğÀ£°ò·Ç½u
+    // 2. è¨ˆç®—èˆ‡åŸºæº–å€¼çš„å·®å€¼
     long diff = currentRaw - _offset;
     
-    // 3. ? ±j¨î¤ÏÂà±×²v¡G¸Ñ¨MµwÅé A+/A- ¤Ï±µ¾É­Pªº­t¬ÛÃö°İÃD
-    // ¦pªG§Aµo²{§l®ğÅÜ¥¿¡B§j®ğÅÜ­t¡A´N«O¯d³o­Ó -1¡C¦pªG¬Û¤Ï¡A´N®³±¼ -1¡C
+    // 3. èª¿æ•´æ¥µæ€§ï¼šè§£æ±ºç¡¬é«”æ¥ç·š (A+/A-) åå‘å°è‡´çš„è² å€¼å•é¡Œ
+    // å¦‚æœç™¼ç¾æ‹‰ä¼¸/å—å£“æ™‚æ•¸å€¼è®Šè² çš„ï¼Œä¹˜ä¸Š -1 å¯ä»¥å°‡é‚è¼¯åè½‰éä¾†
     return diff * -1; 
+}
+
+// ==========================================
+// PID æ§åˆ¶æ ¸å¿ƒå¯¦ä½œ
+// ==========================================
+bool Hx710Sensor::updatePID(uint8_t pumpPin, long target) {
+    long current = getRelativeValue();
+    long error = target - current;
+    
+    // ç©åˆ†é …ï¼šç´¯ç©èª¤å·®ï¼Œä¸¦åŠ å…¥é˜²ç©åˆ†é£½å’Œæ©Ÿåˆ¶
+    _integral += error;
+    _integral = constrain(_integral, -10000, 10000); 
+
+    // å¾®åˆ†é …ï¼šèª¤å·®è®ŠåŒ–ç‡
+    long derivative = error - _previousError;
+    _previousError = error;
+
+    // PID è¨ˆç®—
+    long output = (long)(_kp * error + _ki * _integral + _kd * derivative);
+    output = constrain(output, 0, 255); 
+
+    // è¼¸å‡º PWM æ§åˆ¶æ°£æ³µ
+    analogWrite(pumpPin, output);
+
+    // åˆ¤æ–·æ˜¯å¦é”æ¨™ï¼šç•¶èª¤å·®åœ¨ Â±100 ä»¥å…§å³è¦–ç‚ºé”æ¨™ (å¯æ ¹æ“šå¯¦éš›éœ€æ±‚èª¿æ•´)
+    return abs(error) > 100; 
 }

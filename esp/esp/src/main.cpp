@@ -1,185 +1,61 @@
 #include <Arduino.h>
-#include "driver.h"
 #include "bluetooth.h"
-#include "PressureSensor.h"
-#include "Hx710Sensor.h"
 
-// ==========================================
-// Pin Definitions (ESP32 Safe Pins)
-// ==========================================
-// ®ğ¬¦»P¹qºÏ»Ö
-const int PIN_PUMP_L  = 27;
-const int PIN_PUMP_R  = 26; // ? ¨ú¥N­ì¥»¦MÀIªº 14¡A´«¦¨µ´¹ï¦w¥şªº 26
-const int PIN_VALVE_L = 32; 
-const int PIN_VALVE_R = 33; 
-
-// FSR À£¤O·P´ú (ºû«ù­ì¥»§¹¬üªº Input-only ¸}¦ì)
+// è…³ä½å®šç¾©
+const int PIN_PUMP_L = 27;
+const int PIN_PUMP_R = 26;
+const int PIN_VALVE_L = 32;
+const int PIN_VALVE_R = 33;
 const int PIN_FSR_L = 34;
 const int PIN_FSR_R = 35;
 
-// HX710 ®ğÀ£­p¸}¦ì (¥ª)
-const int PIN_HX710_OUT_L = 19;
-const int PIN_HX710_SCK_L = 18;
+const int FSR_THRESHOLD = 500;
+const int PWM_SPEED = 50;
 
-// HX710 ®ğÀ£­p¸}¦ì (¥k)
-const int PIN_HX710_OUT_R = 21;
-const int PIN_HX710_SCK_R = 22;
+// ç‹€æ…‹æ©Ÿè®Šæ•¸
+unsigned long lastStateTime = 0;
+int state = 0; // 0: æ¸¬è©¦åºåˆ—, 1: å£“åŠ›æ„Ÿæ¸¬ç›£æ§
 
-// ==========================================
-// Object Instantiation
-// ==========================================
-Driver pumpL(PIN_PUMP_L);
-Driver pumpR(PIN_PUMP_R);
-Driver valveL(PIN_VALVE_L);
-Driver valveR(PIN_VALVE_R);
-
-PressureSensor fsrL(PIN_FSR_L);
-PressureSensor fsrR(PIN_FSR_R);
-
-Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L);
-Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R);
-
-// ==========================================
-// Constants & Thresholds
-// ==========================================
-const unsigned long PUMP_MAX_TIME = 15000; // ³Ì¤j¶W®É«OÅ@ 15 ¬í
-const long MAX_AIR_PRESSURE = 13000;       // §A´ú¸Õ¦¨¥\ªº 100% ¹¡º¡«×®ğÀ£­È
-
-// ==========================================
-// State Variables
-// ==========================================
-bool wasHeavyL = false;
-bool isPumpingL = false;
-unsigned long pumpTimerL = 0;
-
-bool wasHeavyR = false;
-bool isPumpingR = false;
-unsigned long pumpTimerR = 0;
-
-unsigned long lastLogTime = 0; 
-
-void setup() {    
+void setup() {
+    Serial.begin(115200);
+    
+    // åˆå§‹åŒ– BLEï¼Œè«‹ç¢ºä¿ä½ çš„ bluetooth.h ä¸­åŒ…å« Service åç¨±è¨­å®š
     ble_setup();
-    ble_log("\n=== Smart Pillow System Init ===");
-
-    // ªì©l¤Æ­P°Ê¾¹¨Ã½T«OÃö³¬
-    pumpL.begin(); pumpL.off();
-    pumpR.begin(); pumpR.off();
-    valveL.begin(); valveL.off();
-    valveR.begin(); valveR.off();
-
-    // ªì©l¤Æ·P´ú¾¹
-    fsrL.begin();
-    fsrR.begin();
-    pressL.begin();
-    pressR.begin();
-
-    ble_log("Please keep the pillow DEFLATED. Taring sensors in 3 seconds...");
-    delay(3000); // µ¹¤©µwÅéÃ­©w®É¶¡
-
-    // ®ğÀ£­p¶}¾÷Âk¹s («D±`­«­n)
-    pressL.tare();
-    pressR.tare();
-
-    ble_log("System Ready. Waiting for user to lie down...");
+    
+    pinMode(PIN_PUMP_L, OUTPUT);
+    pinMode(PIN_PUMP_R, OUTPUT);
+    pinMode(PIN_VALVE_L, OUTPUT);
+    pinMode(PIN_VALVE_R, OUTPUT);
+    pinMode(PIN_FSR_L, INPUT);
+    pinMode(PIN_FSR_R, INPUT);
+    
+    Serial.println("System Ready.");
 }
 
 void loop() {
-    ble_loop(); // ºû«ùÂÅ¤ú³s½u
+    unsigned long currentMillis = millis();
 
-    // Åª¨ú FSR ª¬ºA
-    String statusL = fsrL.getStatus();
-    bool isHeavyL = (statusL == "Heavy Press");
-    
-    String statusR = fsrR.getStatus();
-    bool isHeavyR = (statusR == "Heavy Press");
+    // 1. å£“åŠ›æ„Ÿæ¸¬å™¨å³æ™‚ç›£æ§ (æ°¸é å„ªå…ˆåŸ·è¡Œ)
+    if (analogRead(PIN_FSR_L) > FSR_THRESHOLD) analogWrite(PIN_PUMP_L, PWM_SPEED);
+    else analogWrite(PIN_PUMP_L, 0);
 
-    // ¥ş³tÅª¨úºŞ¸ô§Y®É®ğÀ£
-    long airPressL = pressL.getRelativeValue();
-    long airPressR = pressR.getRelativeValue();
+    if (analogRead(PIN_FSR_R) > FSR_THRESHOLD) analogWrite(PIN_PUMP_R, PWM_SPEED);
+    else analogWrite(PIN_PUMP_R, 0);
 
-    // ==========================================
-    // Left Side Logic (¥ª°¼±±¨îÅŞ¿è)
-    // ==========================================
-    // 1. Ä²µo¥´®ğ¡G­è°»´ú¨ìÀY³¡À£¤U
-    if (isHeavyL && !wasHeavyL) {
-        ble_log("[L] Head detected. Valve CLOSED, Pump ON.");
-        valveL.on();  // Ãö³¬±Æ®ğ»Ö («Ê³¬ºŞ¸ô)
-        pumpL.on();   // ±Ò°Ê®ğ¬¦
-        isPumpingL = true;
-        pumpTimerL = millis(); 
-    }
-    // 2. Ä²µo±Æ®ğ¡GÀY³¡Â÷¶}
-    else if (!isHeavyL && wasHeavyL) {
-        ble_log("[L] Head removed. Pump OFF, Valve OPEN.");
-        pumpL.off();
-        valveL.off(); // ¥´¶}±Æ®ğ»Ö (©ñ®ğ)
-        isPumpingL = false;
-    }
+    // 2. ä½¿ç”¨ç‹€æ…‹æ©Ÿå–ä»£ delay (æ¯ 5 ç§’åˆ‡æ›ä¸€å€‹å‹•ä½œ)
+    if (currentMillis - lastStateTime >= 5000) {
+        lastStateTime = currentMillis;
+        
+        // é—œé–‰æ‰€æœ‰è¼¸å‡º
+        analogWrite(PIN_PUMP_L, 0); analogWrite(PIN_PUMP_R, 0);
+        analogWrite(PIN_VALVE_L, 0); analogWrite(PIN_VALVE_R, 0);
 
-    // 3. ¦w¥ş°±¤î A¡G¶W¹L³]©wªº¥Ø¼Ğ®ğÀ£ (13000)
-    if (isPumpingL && (airPressL >= MAX_AIR_PRESSURE)) {
-        ble_log("[L] Target Pressure Reached! Pump Auto-Stopped.");
-        pumpL.off();
-        isPumpingL = false; // ®ğÀ£¹F¼Ğ¡A°±¤î¥´®ğ¡A¦ı¹qºÏ»Ö«O«ùÃö³¬(ºû«ù¹¡º¡)
-    }
-
-    // 4. ¦w¥ş°±¤î B¡G¥´®ğ¶W®É¨¾Å@ (15¬í)
-    if (isPumpingL && (millis() - pumpTimerL >= PUMP_MAX_TIME)) {
-        ble_log("[L] 15s Timeout reached. Safety Pump OFF.");
-        pumpL.off();
-        isPumpingL = false; 
-    }
-    
-    wasHeavyL = isHeavyL;
-
-    // ==========================================
-    // Right Side Logic (¥k°¼±±¨îÅŞ¿è)
-    // ==========================================
-    // 1. Ä²µo¥´®ğ¡G­è°»´ú¨ìÀY³¡À£¤U
-    if (isHeavyR && !wasHeavyR) {
-        ble_log("[R] Head detected. Valve CLOSED, Pump ON.");
-        valveR.on();  
-        pumpR.on();   
-        isPumpingR = true;
-        pumpTimerR = millis(); 
-    }
-    // 2. Ä²µo±Æ®ğ¡GÀY³¡Â÷¶}
-    else if (!isHeavyR && wasHeavyR) {
-        ble_log("[R] Head removed. Pump OFF, Valve OPEN.");
-        pumpR.off();
-        valveR.off(); 
-        isPumpingR = false;
-    }
-
-    // 3. ¦w¥ş°±¤î A¡G¶W¹L³]©wªº¥Ø¼Ğ®ğÀ£ (13000)
-    if (isPumpingR && (airPressR >= MAX_AIR_PRESSURE)) {
-        ble_log("[R] Target Pressure Reached! Pump Auto-Stopped.");
-        pumpR.off();
-        isPumpingR = false; 
-    }
-
-    // 4. ¦w¥ş°±¤î B¡G¥´®ğ¶W®É¨¾Å@ (15¬í)
-    if (isPumpingR && (millis() - pumpTimerR >= PUMP_MAX_TIME)) {
-        ble_log("[R] 15s Timeout reached. Safety Pump OFF.");
-        pumpR.off();
-        isPumpingR = false; 
-    }
-
-    wasHeavyR = isHeavyR;
-
-    // ==========================================
-    // Telemetry & Logging (»»´ú¦^³ø)
-    // ==========================================
-    if (millis() - lastLogTime > 500) {
-        lastLogTime = millis();
-        // ¥u¦³¦b¥´®ğ©Î¦³¤H½öµÛªº®É­Ô¤~ÀWÁc¦L Log¡AÁ×§K¥­±`¬~ª©
-        if (isHeavyL || isHeavyR || isPumpingL || isPumpingR) {
-            String logMsg = "Press [L]:" + String(airPressL) + 
-                            " [R]:" + String(airPressR);
-            ble_log(logMsg);
+        switch(state) {
+            case 0: ble_log("Test: Pump L"); analogWrite(PIN_PUMP_L, PWM_SPEED); analogWrite(PIN_VALVE_L, PWM_SPEED);break;
+            case 1: ble_log("Test: Pump R"); analogWrite(PIN_PUMP_R, PWM_SPEED); analogWrite(PIN_VALVE_R, PWM_SPEED);break;
+            default: state = -1; break;
         }
-    }
 
-    delay(10); // ¨t²Î·L¤p³İ®§¡A½T«OÂÅ¤úÃ­©w
+        state = (state + 1) % 2; // å¾ªç’°åˆ‡æ›ç‹€æ…‹
+    }
 }
