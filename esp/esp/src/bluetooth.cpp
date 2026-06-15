@@ -4,45 +4,61 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-#define SERVICE_UUID        "0000181A-0000-1000-8000-00805f9b34fb"
-#define CHARACTERISTIC_UUID "00002A58-0000-1000-8000-00805f9b34fb"
-
 BLEServer* pServer = NULL;
 BLECharacteristic* pCharacteristic = NULL;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
-uint16_t mockValue = 0;
+char latest_command = '\0'; // 儲存手機傳來的最新指令
 
+// 處理連線狀態的回呼
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
-      Serial.println("App 已連線");
+      Serial.println("nRF Connect 已連線！");
     };
 
     void onDisconnect(BLEServer* pServer) {
       deviceConnected = false;
-      Serial.println("App 已斷線");
+      Serial.println("nRF Connect 已斷線！");
+    }
+};
+
+// ? 新增：處理手機「寫入」指令的回呼
+class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
+    void onWrite(BLECharacteristic *pCharacteristic) {
+        std::string rxValue = pCharacteristic->getValue();
+        if (rxValue.length() > 0) {
+            // 只抓取第一個字元（例如 '1' 或 '0'）
+            latest_command = rxValue[0]; 
+            Serial.print("藍牙收到原始訊號: ");
+            Serial.println(latest_command);
+        }
     }
 };
 
 void ble_setup() {
-  Serial.begin(115200);
-  Serial.println("ESP32 啟動中...");
-
+  Serial.println("BLE 啟動中...");
   BLEDevice::init("Smart_Neck_Pillow");
+  BLEDevice::setMTU(512); 
+
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
 
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
+  // ? 加入 PROPERTY_WRITE 權限
   pCharacteristic = pService->createCharacteristic(
                       CHARACTERISTIC_UUID,
                       BLECharacteristic::PROPERTY_READ   |
+                      BLECharacteristic::PROPERTY_WRITE  |
                       BLECharacteristic::PROPERTY_NOTIFY
                     );
 
   pCharacteristic->addDescriptor(new BLE2902());
+  // ? 綁定接收指令的回呼函式
+  pCharacteristic->setCallbacks(new MyCharacteristicCallbacks());
+  
   pService->start();
   
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
@@ -55,39 +71,33 @@ void ble_setup() {
 }
 
 void ble_loop() {
-  if (deviceConnected) {
-    mockValue += 5;
-    if(mockValue > 1000) mockValue = 0;
-
-    Serial.print("ESP32 內部準備發送的值: ");
-    Serial.println(mockValue);
-
-    uint8_t payload[2];
-    payload[0] = mockValue & 0xFF;         // Low byte
-    payload[1] = (mockValue >> 8) & 0xFF;  // High byte
-    
-    pCharacteristic->setValue(payload, sizeof(payload));
-    pCharacteristic->notify(); 
-
-    delay(500);
-  }
-
   if (!deviceConnected && oldDeviceConnected) {
       delay(500); 
       pServer->startAdvertising(); 
-      Serial.println("重新開始廣播...");
+      Serial.println("BLE 重新開始廣播...");
       oldDeviceConnected = deviceConnected;
   }
   if (deviceConnected && !oldDeviceConnected) {
       oldDeviceConnected = deviceConnected;
   }
 }
+
 void ble_log(String message) {
   Serial.println(message);
-  
   if (deviceConnected) {
     pCharacteristic->setValue((uint8_t*)message.c_str(), message.length());
     pCharacteristic->notify();
-    delay(10);
+    delay(10); 
   }
+}
+
+bool is_ble_connected() {
+    return deviceConnected;
+}
+
+// 給主程式呼叫用的：讀取指令後立刻清空，避免重複執行
+char get_ble_command() {
+    char cmd = latest_command;
+    latest_command = '\0'; 
+    return cmd;
 }
