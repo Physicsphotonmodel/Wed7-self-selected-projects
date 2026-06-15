@@ -1,6 +1,10 @@
 #include "Hx710Sensor.h"
 
-// 修正：在建構子中一併初始化成員變數與 PID 內部狀態
+float MAX_VAL = 500000;
+
+
+// PID修正至誤差小於１百分比以內。
+
 Hx710Sensor::Hx710Sensor(uint8_t outPin, uint8_t sckPin, float kp, float ki, float kd) {
     _outPin = outPin;
     _sckPin = sckPin;
@@ -56,9 +60,8 @@ long Hx710Sensor::readRaw() {
     return count;
 }
 
-// 讀取多次原始值並計算平均值 (用來濾除高頻雜訊)
 long Hx710Sensor::readAverage(uint8_t times) {
-    if (times == 0) times = 1; // 防呆機制
+    if (times == 0) times = 1;
     long sum = 0;
     for (int i = 0; i < times; i++) {
         sum += readRaw();
@@ -67,7 +70,6 @@ long Hx710Sensor::readAverage(uint8_t times) {
 }
 
 void Hx710Sensor::tare(uint8_t times) {
-    // 捨棄前兩次讀取，確保晶片輸出已穩定
     readRaw(); readRaw();
     // 讀取當前平均值作為歸零基準線
     _offset = readAverage(times);
@@ -76,21 +78,17 @@ void Hx710Sensor::tare(uint8_t times) {
 long Hx710Sensor::getRelativeValue() {
     // 1. 獲取多次濾波後的原始讀值
     long currentRaw = readAverage(5); 
-    
-    // 2. 計算與基準值的差值
     long diff = currentRaw - _offset;
-    
-    // 3. 調整極性：解決硬體接線 (A+/A-) 反向導致的負值問題
-    // 如果發現拉伸/受壓時數值變負的，乘上 -1 可以將邏輯反轉過來
-    return diff * -1; 
+
+    diff = map(diff, 0, MAX_VAL, 0, 100);
+    return diff;
 }
 
-// ==========================================
-// PID 控制核心實作
-// ==========================================
-bool Hx710Sensor::updatePID(uint8_t pumpPin, long target) {
+
+float Hx710Sensor::updatePID(uint8_t pumpPin) {
+
     long current = getRelativeValue();
-    long error = target - current;
+    long error = 100 - current;
     
     // 積分項：累積誤差，並加入防積分飽和機制
     _integral += error;
@@ -104,9 +102,11 @@ bool Hx710Sensor::updatePID(uint8_t pumpPin, long target) {
     long output = (long)(_kp * error + _ki * _integral + _kd * derivative);
     output = constrain(output, 0, 255); 
 
-    // 輸出 PWM 控制氣泵
-    analogWrite(pumpPin, output);
+    return output;
 
-    // 判斷是否達標：當誤差在 ±100 以內即視為達標 (可根據實際需求調整)
-    return abs(error) > 100; 
+}
+
+void Hx710Sensor::resetPID() {
+    _integral = 0;
+    _previousError = 0;
 }

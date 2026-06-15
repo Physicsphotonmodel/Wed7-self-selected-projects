@@ -17,11 +17,9 @@ public:
     // Read the raw 12-bit ADC value (0 - 4095)
     int readRaw();
 
-    // Calculate the estimated voltage (0.0 - 3.3V)
-    float readVoltage();
+    // Determine if the pressure exceeds a certain threshold (e.g., 3000)
+    bool PressureSensor::isPressed();
 
-    // Get a human-readable string based on pressure thresholds
-    String getStatus();
 };
 
 #endif

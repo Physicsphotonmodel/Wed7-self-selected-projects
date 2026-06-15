@@ -2,12 +2,21 @@
 #include "bluetooth.h"
 
 // 腳位定義
+
+
 const int PIN_PUMP_L = 27;
 const int PIN_PUMP_R = 26;
 const int PIN_VALVE_L = 32;
 const int PIN_VALVE_R = 33;
 const int PIN_FSR_L = 34;
 const int PIN_FSR_R = 35;
+
+
+const int PIN_HX710_OUT_L = 19;
+const int PIN_HX710_SCK_L = 18;
+const int PIN_HX710_OUT_R = 21;
+const int PIN_HX710_SCK_R = 22;
+
 
 const int FSR_THRESHOLD = 500;
 const int PWM_SPEED = 50;
@@ -18,17 +27,7 @@ int state = 0; // 0: 測試序列, 1: 壓力感測監控
 
 void setup() {
     Serial.begin(115200);
-    
-    // 初始化 BLE，請確保你的 bluetooth.h 中包含 Service 名稱設定
     ble_setup();
-    
-    pinMode(PIN_PUMP_L, OUTPUT);
-    pinMode(PIN_PUMP_R, OUTPUT);
-    pinMode(PIN_VALVE_L, OUTPUT);
-    pinMode(PIN_VALVE_R, OUTPUT);
-    pinMode(PIN_FSR_L, INPUT);
-    pinMode(PIN_FSR_R, INPUT);
-    
     Serial.println("System Ready.");
 }
 
