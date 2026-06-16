@@ -54,7 +54,7 @@ public:
     }
 
 
-    /*void PIDcontrol() {
+    void PIDcontrol() {
 
         float L_val = sensorL.updatePID(PIN_PUMP_L);
         float R_val = sensorR.updatePID(PIN_PUMP_R);
@@ -109,6 +109,6 @@ public:
             }
         }
 
-    };*/
+    };
 
-};
+

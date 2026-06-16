@@ -41,6 +41,8 @@ public:
     int updatePID_cont(void);
 
     void resetPID();
+
+    void readAndPrint();
 };
 
 #endif

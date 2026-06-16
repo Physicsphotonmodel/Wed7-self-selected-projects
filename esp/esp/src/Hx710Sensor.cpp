@@ -1,4 +1,5 @@
 #include "Hx710Sensor.h"
+#include "bluetooth.h"
 
 float MAX_VAL = 500000;
 
@@ -133,4 +134,10 @@ int Hx710Sensor::updatePID_cont(void) {
 void Hx710Sensor::resetPID() {
     _integral = 0;
     _previousError = 0;
+}
+
+void Hx710Sensor::readAndPrint() {
+
+    long value = readRaw();
+    ble_log("HX710 Raw Value: " + String(value));
 }
