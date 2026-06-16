@@ -15,6 +15,9 @@ class Pump {
 
     void off();
 
-};
+    void setpwm(int pwm_value){
+    };
+
+  };
 
 #endif

@@ -85,28 +85,48 @@ long Hx710Sensor::getRelativeValue() {
 }
 
 
-float Hx710Sensor::updatePID(uint8_t pumpPin) {
-
+bool Hx710Sensor::updatePID(uint8_t pumpPin, uint8_t valvePin) {
     long current = getRelativeValue();
     long error = 100 - current;
     
-    // 積分項：累積誤差，並加入防積分飽和機制
-    _integral += error;
-    _integral = constrain(_integral, -10000, 10000); 
 
-    // 微分項：誤差變化率
+    if (error <= 2 && error >= -2) {
+        analogWrite(pumpPin, 0);
+        digitalWrite(valvePin, HIGH); //常開型，所以給high讓它關閉
+        return false; 
+    }
+
+    if (error > 0) {
+        digitalWrite(valvePin, HIGH);
+        _integral += error;
+        _integral = constrain(_integral, 0, 1000); 
+        long derivative = error - _previousError;
+        int output = (int)(_kp * error + _ki * _integral + _kd * derivative);
+        analogWrite(pumpPin, constrain(output, 0, 255));
+    } 
+
+
+    else {
+        analogWrite(pumpPin, 0);     
+        digitalWrite(valvePin, LOW); 
+    }
+
+    _previousError = error;
+    return true;
+}
+
+int Hx710Sensor::updatePID_cont(void) {
+    long current = getRelativeValue();
+    long error = 100 - current;
+    
+    _integral = constrain(_integral + error, -1000, 1000); 
+
     long derivative = error - _previousError;
     _previousError = error;
 
-    // PID 計算
-    long output = (long)(_kp * error + _ki * _integral + _kd * derivative);
-    output = constrain(output, 0, 255); 
-
-    return output;
-
-}
-
-void Hx710Sensor::resetPID() {
-    _integral = 0;
-    _previousError = 0;
+    int output = (int)(_kp * error + _ki * _integral + _kd * derivative);
+    
+    if (abs(error) <= 1) return 0;
+    
+    return constrain(output, 0, 255); 
 }

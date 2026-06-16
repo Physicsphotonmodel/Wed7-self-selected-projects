@@ -1,5 +1,5 @@
 #include "pump.h"
-
+#include "Arduino.h"
 
 
 Pump::Pump(uint8_t pin) {
@@ -17,4 +17,8 @@ void Pump::on() {
 
 void Pump::off() {
     digitalWrite(_pin, LOW);
+}
+
+void Pump::setpwm(int pwm_value){
+    analogWrite(_pin, pwm_value);
 }

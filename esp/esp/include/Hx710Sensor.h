@@ -36,7 +36,9 @@ public:
     void tare(uint8_t times = 10);
     long getRelativeValue();
     
-    float updatePID(uint8_t pumpPin);
+    bool updatePID(uint8_t pumpPin, uint8_t valvePin);
+
+    int updatePID_cont(void);
 
     void resetPID();
 };

@@ -1,4 +1,5 @@
 #include "Arduino.h"
+#include "valve.h"
 
 class Valve {
   
