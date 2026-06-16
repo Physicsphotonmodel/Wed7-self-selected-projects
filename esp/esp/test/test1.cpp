@@ -16,24 +16,30 @@ PressureSensor SensorL(PIN_OUT_L);
 /**
  * @brief 測試充氣並記錄氣壓 (測試用 Function)
  */
+    
 void testInflation() {
-    
-    ble_log(">>> initial 0.5s...");
-    valveL.close();      
-    pumpL.setpwm(255); 
-    delay(3500);  
-    
-    int val = analogRead(PIN_OUT_L);
-    ble_log(String(val));
-    valveL.open();
-    
-    pumpL.setpwm(0);    
-    delay(500);
 
+    ble_log(">>> Inflating...");
+    valveL.close();
+    pumpL.setpwm(255);
+    delay(3500);
+    
+    // 確保使用 int 接收，ESP32 ADC 範圍是 0-4095
+    int val = analogRead(PIN_OUT_L);
+    
+    // 將數字強制轉換為十進制字串並記錄
+    ble_log("Value: " + String(val, DEC));
+    
+    valveL.open();
+    pumpL.setpwm(0);
+    delay(500);
 }
 
 void setup() {
+    
+    
     ble_setup();
+    ble_log(">>> initial 0.5s...");
     pumpL.begin();
     valveL.begin();
     testInflation();
