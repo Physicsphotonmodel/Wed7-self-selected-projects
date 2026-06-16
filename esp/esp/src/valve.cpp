@@ -1,28 +1,22 @@
 #include "Arduino.h"
 #include "valve.h"
 
-class Valve {
-  
-private:
-    uint8_t _pin;
-  
-  
-public:
+Valve::Valve(uint8_t pin) {
+    _pin = pin;
+}
 
-    Valve(uint8_t pin){
-        _pin = pin;
-    }
+// 初始化函式
+void Valve::begin() {
+    pinMode(_pin, OUTPUT);
+    close();
+}
 
-    void begin(){
-        pinMode(_pin, OUTPUT);
-        close(); // 預設為關閉狀態
-    };
+// 開啟閥門
+void Valve::open() {
+    digitalWrite(_pin, LOW);
+}
 
-    void open(){
-        digitalWrite(_pin, LOW);
-    };
-
-    void close(){
-        digitalWrite(_pin, HIGH);
-    };
-};
+// 關閉閥門
+void Valve::close() {
+    digitalWrite(_pin, HIGH);
+}

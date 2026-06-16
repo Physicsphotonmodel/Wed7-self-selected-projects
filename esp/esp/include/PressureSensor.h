@@ -18,7 +18,7 @@ public:
     int readRaw();
 
     // Determine if the pressure exceeds a certain threshold (e.g., 3000)
-    bool PressureSensor::isPressed();
+    bool isPressed();
 
 };
 

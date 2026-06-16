@@ -8,8 +8,8 @@
 // ==========================================
 // Pin Definitions
 // ==========================================
-const int PIN_PUMP_L = 27;
-const int PIN_PUMP_R = 26; 
+const int PIN_PUMP_L = 17;
+const int PIN_PUMP_R = 16; 
 const int PIN_VALVE_L = 32; 
 const int PIN_VALVE_R = 33; 
 const int PIN_FSR_L = 34;
@@ -28,8 +28,10 @@ Valve valveL(PIN_VALVE_L);
 Valve valveR(PIN_VALVE_R);
 PressureSensor fsrL(PIN_FSR_L);
 PressureSensor fsrR(PIN_FSR_R);
-Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0.01, 0.2);
-Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0.01, 0.2);
+// Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0.01, 0.2);
+// Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0.01, 0.2);
+Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0, 0, 0);
+Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0, 0, 0);
 
 const unsigned long PUMP_MAX_TIME = 15000;
 
@@ -56,54 +58,57 @@ void setup() {
     pressR.tare();
 }
 
+
 void loop() {
-    ble_loop(); 
+    ble_loop();
 
     bool isHeavyL = fsrL.isPressed();
     bool isHeavyR = fsrR.isPressed();
 
     if (isHeavyL) {
-        if (pressL.updatePID(PIN_PUMP_L, PIN_VALVE_L)) {
-        } 
-        
-        else {
-            valveL.close();
-        }
-        
-        if (millis() - pumpTimerL >= PUMP_MAX_TIME) {
-            analogWrite(PIN_PUMP_L, 0);
-            valveL.close();
-        }
 
+        int pwmL = pressL.updatePID_cont(); 
+        
+        if (pwmL > 0) {
+            valveL.close();
+            pumpL.setpwm(pwmL);
+        } else if (pwmL < 0) {
+
+            pumpL.setpwm(0);
+            valveL.open();
+        } else {
+            // 已達標，鎖住氣壓
+            valveL.close();
+            pumpL.setpwm(0);
+        }
     } else {
-        analogWrite(PIN_PUMP_L, 0);
-        valveL.open(); 
+        pumpL.setpwm(0);
+        valveL.open();
         pressL.resetPID();
-        pumpTimerL = millis();
     }
 
+    // --- 右側連續控制 ---
     if (isHeavyR) {
-        if (pressR.updatePID(PIN_PUMP_R, PIN_VALVE_R)) {
+        int pwmR = pressR.updatePID_cont();
+        
+        if (pwmR > 0) {
+            valveR.close();
+            pumpR.setpwm(pwmR);
+        } else if (pwmR < 0) {
+            pumpR.setpwm(0);
+            valveR.open();
         } else {
             valveR.close();
-        }
-        
-        if (millis() - pumpTimerR >= PUMP_MAX_TIME) {
-            analogWrite(PIN_PUMP_R, 0);
-            valveR.close();
+            pumpR.setpwm(0);
         }
     } else {
-        analogWrite(PIN_PUMP_R, 0);
+        pumpR.setpwm(0);
         valveR.open();
         pressR.resetPID();
-        pumpTimerR = millis();
     }
 
     if (millis() - lastLogTime > 500) {
         lastLogTime = millis();
-        String logMsg = "[L] Pres: " + String(pressL.getRelativeValue()) + 
-                        " | [R] Pres: " + String(pressR.getRelativeValue());
-        ble_log(logMsg);
+        ble_log("[L] Pres: " + String(pressL.getRelativeValue()) + " | [R] Pres: " + String(pressR.getRelativeValue()));
     }
-    delay(10); 
 }

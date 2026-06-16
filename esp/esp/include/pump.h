@@ -8,16 +8,10 @@ class Pump {
 
   public:
     Pump(uint8_t pin);
-
     void begin();
-
     void on();
-
     void off();
-
-    void setpwm(int pwm_value){
-    };
-
-  };
+    void setpwm(int pwm_value);
+};
 
 #endif

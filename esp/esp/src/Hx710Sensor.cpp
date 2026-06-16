@@ -102,7 +102,6 @@ bool Hx710Sensor::updatePID(uint8_t pumpPin, uint8_t valvePin) {
         _integral = constrain(_integral, 0, 1000); 
         long derivative = error - _previousError;
         int output = (int)(_kp * error + _ki * _integral + _kd * derivative);
-        analogWrite(pumpPin, constrain(output, 0, 255));
     } 
 
 
@@ -129,4 +128,9 @@ int Hx710Sensor::updatePID_cont(void) {
     if (abs(error) <= 1) return 0;
     
     return constrain(output, 0, 255); 
+}
+
+void Hx710Sensor::resetPID() {
+    _integral = 0;
+    _previousError = 0;
 }

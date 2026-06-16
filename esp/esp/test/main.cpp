@@ -8,8 +8,8 @@
 // ==========================================
 // Pin Definitions
 // ==========================================
-const int PIN_PUMP_L = 27;
-const int PIN_PUMP_R = 26; 
+const int PIN_PUMP_L = 17;
+const int PIN_PUMP_R = 16; 
 const int PIN_VALVE_L = 32; 
 const int PIN_VALVE_R = 33; 
 const int PIN_FSR_L = 34;
@@ -28,8 +28,10 @@ Valve valveL(PIN_VALVE_L);
 Valve valveR(PIN_VALVE_R);
 PressureSensor fsrL(PIN_FSR_L);
 PressureSensor fsrR(PIN_FSR_R);
-Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0.01, 0.2);
-Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0.01, 0.2);
+// Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0.01, 0.2);
+// Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0.01, 0.2);
+Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0, 0, 0);
+Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0, 0, 0);
 
 const unsigned long PUMP_MAX_TIME = 15000;
 
@@ -46,8 +48,8 @@ void setup() {
     
     pumpL.begin(); pumpL.off();
     pumpR.begin(); pumpR.off();
-    valveL.begin(); valveL.close();
-    valveR.begin(); valveR.close();
+    valveL.begin(); valveL.open();
+    valveR.begin(); valveR.open();
     fsrL.begin(); fsrR.begin();
     pressL.begin(); pressR.begin();
 
@@ -79,7 +81,9 @@ void loop() {
             valveL.close();
             pumpL.setpwm(0);
         }
-    } else {
+    } 
+    
+    else {
         pumpL.setpwm(0);
         valveL.open();
         pressL.resetPID();
@@ -109,5 +113,4 @@ void loop() {
         lastLogTime = millis();
         ble_log("[L] Pres: " + String(pressL.getRelativeValue()) + " | [R] Pres: " + String(pressR.getRelativeValue()));
     }
-    delay(10);
 }
