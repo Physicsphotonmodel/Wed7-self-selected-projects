@@ -77,7 +77,7 @@ void loop() {
             pumpL.setpwm(0);
             valveL.open();
         } else {
-            // 已達標，鎖住氣壓
+
             valveL.close();
             pumpL.setpwm(0);
         }

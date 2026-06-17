@@ -10,8 +10,8 @@
 // ==========================================
 const int PIN_PUMP_L = 17;
 const int PIN_PUMP_R = 16; 
-const int PIN_VALVE_L = 32; 
-const int PIN_VALVE_R = 33; 
+const int PIN_VALVE_L = 13;
+const int PIN_VALVE_R = 27;
 const int PIN_FSR_L = 34;
 const int PIN_FSR_R = 35;
 const int PIN_HX710_OUT_L = 4;
@@ -31,61 +31,13 @@ PressureSensor fsrR(PIN_FSR_R);
 Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0, 0);
 Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0, 0);
 
-// ==========================================
-// State Machine Variables
-// ==========================================
-enum State { INIT, INFLATING, FINISHING };
-State currentState = INIT;
-unsigned long stateStartTime = 0;
-
-// ==========================================
-// Main Functions
-// ==========================================
-void testInflation() {
-    unsigned long currentMillis = millis();
-
-    switch (currentState) {
-        case INIT:
-        if (currentMillis - stateStartTime <= 500) {
-            
-            ble_log(">>> initial 0.5s...");
-            valveL.close();
-            valveR.close();
-            pumpL.setpwm(255);
-            pumpR.setpwm(255);
-            stateStartTime = currentMillis;
-            currentState = INFLATING;
-            break;
-        }
-
-        case INFLATING:
-            if (currentMillis - stateStartTime <= 500) {
-                int val = analogRead(PIN_HX710_OUT_L);
-                ble_log(String(val));
-                valveL.open(); // 打開左閥排氣
-                pumpL.setpwm(0);
-                pumpR.setpwm(0);
-                stateStartTime = currentMillis;
-                currentState = FINISHING;
-            }
-            break;
-
-        case FINISHING:
-            // 等待 500ms 後循環
-            if (currentMillis - stateStartTime <= 500) {
-                currentState = INIT;
-                stateStartTime = 0;
-
-                
-            }
-            break;
-    }
-}
+int systemState = 0;
 
 void setup() {
     Serial.begin(115200);
     ble_setup();
-    
+    analogWriteResolution(8);
+
     pumpL.begin(); pumpL.off();
     pumpR.begin(); pumpR.off();
     valveL.begin(); valveL.close();
@@ -93,15 +45,64 @@ void setup() {
     fsrL.begin(); fsrR.begin();
     pressL.begin(); pressR.begin();
 
-    // 初始狀態啟動
-    currentState = INIT;
-    ble_log("System Ready - Test Started");
+    pressL.tare();
+    pressR.tare();
+
+    valveL.close();
+    valveR.close();
+
+    ble_log("Started synchronous inflation...");
 }
 
 void loop() {
-    // 必須優先執行，確保 BLE 處理能力
-    ble_loop();
-    
-    // 執行狀態機邏輯，完全無阻塞
-    testInflation();
+
+    if(systemState == 0){
+
+        if(is_ble_connected){
+            float seconds = millis() / 1000;
+        
+            ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
+            ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
+  
+            if(seconds > 1){
+
+                pumpL.setpwm(255);
+                pumpR.setpwm(255);
+                ble_log("[FSR]L:" + String(analogRead(PIN_FSR_L)));
+                ble_log("[FSR]R:" + String(analogRead(PIN_FSR_R)));
+                ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
+                ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
+                ble_log("+============================================+");
+            
+                if (fsrL.isPressed() || fsrR.isPressed()) {
+
+                    pumpL.setpwm(0);
+                    pumpR.setpwm(0);
+                    valveL.close();
+                    valveR.close();
+
+                    // 輸出此時的氣壓值
+                    long valL = pressL.getRelativeValue();
+                    long valR = pressR.getRelativeValue();
+                    
+                    ble_log("Critical state reac");
+                    ble_log("P L: " + String(valL) + " | P R: " + String(valR));
+
+                    systemState = 1;
+                }
+            }
+
+        else{
+            ble_log("Exit system loop and abort!!");
+            ble_log("[FSR]L:" + String(analogRead(PIN_FSR_L)));
+            ble_log("[FSR]R:" + String(analogRead(PIN_FSR_R)));
+            ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
+            ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
+            ble_log("+============================================+");
+
+            }
+
+        }
+
+    }
 }

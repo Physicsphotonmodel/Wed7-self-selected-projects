@@ -1,7 +1,7 @@
 #include "Hx710Sensor.h"
 #include "bluetooth.h"
 
-float MAX_VAL = 5000000;  // 改成欣脖的壓力
+float MAX_VAL = 3550000;    // 改成欣脖的壓力
 
 Hx710Sensor::Hx710Sensor(uint8_t outPin, uint8_t sckPin, float kp, float ki, float kd) {
     _outPin = outPin;
