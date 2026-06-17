@@ -11,6 +11,6 @@ int PressureSensor::readRaw() {
 }
 
 bool PressureSensor::isPressed() {
-    return readRaw() > 3000;
+    return readRaw() > 800;
 }
 

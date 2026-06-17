@@ -1,65 +1,82 @@
-#include "Arduino.h"
-#include "pump.h"       
+#include <Arduino.h>
+#include "pump.h"
 #include "valve.h"
-#include "PressureSensor.h"
-#include "Hx710Sensor.h"   
 #include "bluetooth.h"
+#include "PressureSensor.h"
+#include "Hx710Sensor.h"
 
-// Pin definitions
+// ==========================================
+// Pin Definitions
+// ==========================================
 const int PIN_PUMP_L = 17;
-const int PIN_VALVE_L = 32;
-const int PIN_FSR_L = 34;          // FSR pin
-const int PIN_HX710_OUT_L = 4;     // HX710 OUT pin
-const int PIN_HX710_SCK_L = 18;    // HX710 SCK pin
+const int PIN_PUMP_R = 16; 
+const int PIN_VALVE_L = 32; 
+const int PIN_VALVE_R = 33; 
+const int PIN_FSR_L = 34;
+const int PIN_FSR_R = 35;
+const int PIN_HX710_OUT_L = 4;
+const int PIN_HX710_SCK_L = 18;
+const int PIN_HX710_OUT_R = 25;
+const int PIN_HX710_SCK_R = 22;
 
-// Instantiate objects
+// ==========================================
+// Object Instantiation
+// ==========================================
 Pump pumpL(PIN_PUMP_L);
+Pump pumpR(PIN_PUMP_R);
 Valve valveL(PIN_VALVE_L);
+Valve valveR(PIN_VALVE_R);
 PressureSensor fsrL(PIN_FSR_L);
+PressureSensor fsrR(PIN_FSR_R);
+Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0, 0);
+Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0, 0);
 
-// Initialize pressure sensor (PID params = 0 for read-only test)
-Hx710Sensor airPressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 1.0, 0, 0);
+// ==========================================
+// State Machine Variables
+// ==========================================
+enum State { INIT, INFLATING, FINISHING };
+State currentState = INIT;
+unsigned long stateStartTime = 0;
 
-unsigned long stateTimer = 0;
-int testState = 0;
-
+// ==========================================
+// Main Functions
+// ==========================================
 void testInflation() {
     unsigned long currentMillis = millis();
 
-    switch (testState) {
-        case 0:
-            // Keep string under 20 bytes to avoid BLE truncation
-            ble_log("S0:V_CLS, P_ON"); 
-            valveL.close();      
-            pumpL.setpwm(255); 
-            stateTimer = currentMillis;
-            testState = 1;
+    switch (currentState) {
+        case INIT:
+        if (currentMillis - stateStartTime <= 500) {
+            
+            ble_log(">>> initial 0.5s...");
+            valveL.close();
+            valveR.close();
+            pumpL.setpwm(255);
+            pumpR.setpwm(255);
+            stateStartTime = currentMillis;
+            currentState = INFLATING;
             break;
+        }
 
-        case 1:
-            if (currentMillis - stateTimer >= 3500) {
-                // 1. Read FSR value
-                int fsrVal = fsrL.readRaw(); 
-                
-                // 2. Read relative air pressure (internally averaged)
-                long airVal = airPressL.getRelativeValue();
-
-                // 3. Combine into short string
-                String msg = "F:" + String(fsrVal) + " A:" + String(airVal);
-                ble_log(msg);
-                
-                ble_log("S1:V_OPN, P_OFF");
-                valveL.open();
-                pumpL.setpwm(0);    
-                
-                stateTimer = currentMillis;
-                testState = 2;
+        case INFLATING:
+            if (currentMillis - stateStartTime <= 500) {
+                int val = analogRead(PIN_HX710_OUT_L);
+                ble_log(String(val));
+                valveL.open(); // 打開左閥排氣
+                pumpL.setpwm(0);
+                pumpR.setpwm(0);
+                stateStartTime = currentMillis;
+                currentState = FINISHING;
             }
             break;
 
-        case 2:
-            if (currentMillis - stateTimer >= 500) {
-                testState = 0; 
+        case FINISHING:
+            // 等待 500ms 後循環
+            if (currentMillis - stateStartTime <= 500) {
+                currentState = INIT;
+                stateStartTime = 0;
+
+                
             }
             break;
     }
@@ -68,20 +85,23 @@ void testInflation() {
 void setup() {
     Serial.begin(115200);
     ble_setup();
-    analogWriteResolution(8); // Ensure 255 is max speed
     
-    pumpL.begin();
-    valveL.begin();
-    fsrL.begin();
-    
-    // Start pressure sensor and tare
-    airPressL.begin();
-    delay(2000); // Hardware stabilization wait
-    airPressL.tare(10); 
-    ble_log("System Ready!");
+    pumpL.begin(); pumpL.off();
+    pumpR.begin(); pumpR.off();
+    valveL.begin(); valveL.close();
+    valveR.begin(); valveR.close();
+    fsrL.begin(); fsrR.begin();
+    pressL.begin(); pressR.begin();
+
+    // 初始狀態啟動
+    currentState = INIT;
+    ble_log("System Ready - Test Started");
 }
 
 void loop() {
-    ble_loop(); 
+    // 必須優先執行，確保 BLE 處理能力
+    ble_loop();
+    
+    // 執行狀態機邏輯，完全無阻塞
     testInflation();
 }
