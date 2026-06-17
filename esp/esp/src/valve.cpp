@@ -5,18 +5,18 @@ Valve::Valve(uint8_t pin) {
     _pin = pin;
 }
 
-// 初始化函式
+// Initialize function
 void Valve::begin() {
     pinMode(_pin, OUTPUT);
     close();
 }
 
-// 開啟閥門
+// Open valve
 void Valve::open() {
     digitalWrite(_pin, LOW);
 }
 
-// 關閉閥門
+// Close valve
 void Valve::close() {
     digitalWrite(_pin, HIGH);
 }

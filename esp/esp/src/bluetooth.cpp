@@ -4,7 +4,6 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-// 定義 UUID
 const char* SERVICE_UUID        = "4fafc201-1fb5-454e-8a2c-01412e646461";
 const char* CHARACTERISTIC_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
 
@@ -14,38 +13,36 @@ bool deviceConnected = false;
 bool oldDeviceConnected = false;
 
 String latest_string_command = "";
+char latest_command = '\0'; // Store latest command
 
-
-char latest_command = '\0'; // 儲存手機過來的最新指令
-
-// 處理連線狀態的回撥函式
+// Server Callbacks
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
         deviceConnected = true;
-        Serial.println("\n[BLE INFO] 手機 nRF Connect 已成功連線！");
+        Serial.println("\n[BLE INFO] Device connected!");
     }
 
     void onDisconnect(BLEServer* pServer) {
         deviceConnected = false;
-        Serial.println("\n[BLE INFO] 手機 nRF Connect 已斷開連線！");
+        Serial.println("\n[BLE INFO] Device disconnected!");
     }
 };
 
-// 處理手機寫入指令的回撥函式
+// Characteristic Callbacks
 class MyCharacteristicCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
         std::string rxValue = pCharacteristic->getValue();
         if (rxValue.length() > 0) {
-            // 關鍵：將整個字串轉成 String，不要只取第一個字元！
+            // Store received value as String
             latest_string_command = String(rxValue.c_str()); 
-            Serial.print("\n[BLE RECEIVE] 收到字串輸入: ");
+            Serial.print("\n[BLE RECEIVE] Received: ");
             Serial.println(latest_string_command);
         }
     }
 };
 
 void ble_setup() {
-    Serial.println("[INFO] BLE 啟動中...");
+    Serial.println("[INFO] BLE starting...");
     BLEDevice::init("Smart_Pillow_System");
     BLEDevice::setMTU(512); 
 
@@ -72,14 +69,14 @@ void ble_setup() {
     pAdvertising->setMinPreferred(0x0);
     BLEDevice::startAdvertising();
     
-    Serial.println("[INFO] 藍牙廣播已開啟，等待手機連線...");
+    Serial.println("[INFO] BLE advertising started. Waiting for connection...");
 }
 
 void ble_loop() {
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); 
         pServer->startAdvertising(); 
-        Serial.println("[BLE INFO] 重新開啟藍牙廣播...");
+        Serial.println("[BLE INFO] Restarting advertising...");
         oldDeviceConnected = deviceConnected;
     }
     if (deviceConnected && !oldDeviceConnected) {
@@ -102,15 +99,25 @@ bool is_ble_connected() {
 
 String get_ble_string_command() {
     String cmd = latest_string_command;
-    latest_string_command = ""; // 讀取後清空
+    latest_string_command = ""; // Clear after read
     return cmd;
 }
 
 char get_ble_command() {
-
-    if (latest_string_command.length() > 0) return latest_string_command[0];
+    char cmd = '\0';
     
-    char cmd = latest_command;
-    latest_command = '\0'; // 讀取後清空，避免重複觸發
+    // If there is a full string, take first char and clear
+    if (latest_string_command.length() > 0) {
+        cmd = latest_string_command[0];
+        latest_string_command = ""; 
+        return cmd;
+    }
+    
+    // If it is a single char command, read and clear
+    if (latest_command != '\0') {
+        cmd = latest_command;
+        latest_command = '\0';
+    }
+    
     return cmd;
 }
