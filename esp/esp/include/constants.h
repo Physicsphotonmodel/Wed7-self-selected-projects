@@ -8,3 +8,5 @@ extern const int PIN_HX710_OUT_L;
 extern const int PIN_HX710_SCK_L;
 extern const int PIN_HX710_OUT_R;
 extern const int PIN_HX710_SCK_R;
+extern const int FSR_THRESHOLD_L;
+extern const int FSR_THRESHOLD_R;
