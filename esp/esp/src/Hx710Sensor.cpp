@@ -72,7 +72,6 @@ long Hx710Sensor::readAverage(uint8_t times) {
 
 void Hx710Sensor::tare(uint8_t times) {
     readRaw(); readRaw();
-    // 讀取當前平均值作為歸零基準線
     _offset = readAverage(times);
 }
 
@@ -81,7 +80,6 @@ long Hx710Sensor::getRelativeValue() {
     long currentRaw = readAverage(5); 
     long diff = currentRaw - _offset;
 
-    diff = map(diff, 0, MAX_VAL, 0, 100);
     return diff;
 }
 
