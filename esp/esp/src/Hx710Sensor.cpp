@@ -77,7 +77,7 @@ void Hx710Sensor::tare(uint8_t times) {
 long Hx710Sensor::getRelativeValue() {
     long currentRaw = readAverage(5); 
     long diff = currentRaw - _offset;
-    diff = map(diff, 0, MAX_VAL, 0, 100);
+    // diff = map(diff, 0, MAX_VAL, 0, 100);
     return diff;
 }
 
