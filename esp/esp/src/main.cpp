@@ -5,9 +5,6 @@
 #include "PressureSensor.h"
 #include "Hx710Sensor.h"
 
-// ==========================================
-// Pin Definitions
-// ==========================================
 const int PIN_PUMP_L = 17;
 const int PIN_PUMP_R = 16; 
 const int PIN_VALVE_L = 13;
@@ -19,9 +16,14 @@ const int PIN_HX710_SCK_L = 18;
 const int PIN_HX710_OUT_R = 25;
 const int PIN_HX710_SCK_R = 22;
 
-// ==========================================
-// Object Instantiation
-// ==========================================
+const long P_MAX = 3350000; // 100%
+const long P1 = P_MAX; 
+const long P2 = P_MAX * 1.1; 
+//need P3?
+
+// Tolerance to prevent pump/valve chattering around target pressure, can adjust?
+const long P_TOL = 30000; 
+
 Pump pumpL(PIN_PUMP_L);
 Pump pumpR(PIN_PUMP_R);
 Valve valveL(PIN_VALVE_L);
@@ -31,7 +33,150 @@ PressureSensor fsrR(PIN_FSR_R);
 Hx710Sensor pressL(PIN_HX710_OUT_L, PIN_HX710_SCK_L, 0.5, 0, 0);
 Hx710Sensor pressR(PIN_HX710_OUT_R, PIN_HX710_SCK_R, 0.5, 0, 0);
 
-int systemState = 0;
+enum SystemState {
+    STATE_IDLE,
+    STATE_INFLATE,
+    STATE_HOLD,
+    STATE_DEFLATE
+};
+
+SystemState stateL = STATE_IDLE;
+SystemState stateR = STATE_IDLE;
+
+unsigned long lastLogTime = 0;
+
+void processSideL() {
+    long currentPress = pressL.getRelativeValue();
+    bool isUserPresent = fsrL.isPressed();
+
+    switch (stateL) {
+        case STATE_IDLE:
+            if (isUserPresent) {
+                stateL = STATE_INFLATE;
+                ble_log("L S0->S1");
+            } else if (currentPress < (P1 - P_TOL)) {
+                valveL.close();
+                pumpL.setpwm(255);
+            } else if (currentPress > (P1 + P_TOL)) {
+                valveL.open();
+                pumpL.setpwm(0);
+            } else {
+                valveL.close();
+                pumpL.setpwm(0);
+            }
+            break;
+
+        case STATE_INFLATE:
+            valveL.close();
+            pumpL.setpwm(255);
+            if (!isUserPresent) {
+                stateL = STATE_DEFLATE;
+                ble_log("L S1->S3");
+            } else if (currentPress >= P2) {
+                stateL = STATE_HOLD;
+                ble_log("L S1->S2");
+            }
+            break;
+
+        case STATE_HOLD:
+            valveL.close();
+            pumpL.setpwm(0);
+            if (!isUserPresent) {
+                stateL = STATE_DEFLATE;
+                ble_log("L S2->S3");
+            } else if (currentPress <= P2) {
+                stateL = STATE_INFLATE;
+                ble_log("L S2->S1");
+            }
+            break;
+
+        case STATE_DEFLATE:
+            valveL.open();
+            pumpL.setpwm(0);
+            if (currentPress <= P1) {
+                stateL = STATE_IDLE;
+                ble_log("L S3->S0");
+            } else if (isUserPresent) {
+                stateL = STATE_INFLATE;
+                ble_log("L S3->S1");
+            }
+            break;
+    }
+}
+
+void processSideR() {
+    long currentPress = pressR.getRelativeValue();
+    bool isUserPresent = fsrR.isPressed();
+
+    switch (stateR) {
+        case STATE_IDLE:
+            if (isUserPresent) {
+                stateR = STATE_INFLATE;
+                ble_log("R S0->S1");
+            } else if (currentPress < (P1 - P_TOL)) {
+                valveR.close();
+                pumpR.setpwm(255);
+            } else if (currentPress > (P1 + P_TOL)) {
+                valveR.open();
+                pumpR.setpwm(0);
+            } else {
+                valveR.close();
+                pumpR.setpwm(0);
+            }
+            break;
+
+        case STATE_INFLATE:
+            valveR.close();
+            pumpR.setpwm(255);
+            if (!isUserPresent) {
+                stateR = STATE_DEFLATE;
+                ble_log("R S1->S3");
+            } else if (currentPress >= P2) {
+                stateR = STATE_HOLD;
+                ble_log("R S1->S2");
+            }
+            break;
+
+        case STATE_HOLD:
+            valveR.close();
+            pumpR.setpwm(0);
+            if (!isUserPresent) {
+                stateR = STATE_DEFLATE;
+                ble_log("R S2->S3");
+            } else if (currentPress <= P2) {
+                stateR = STATE_INFLATE;
+                ble_log("R S2->S1");
+            }
+            break;
+
+        case STATE_DEFLATE:
+            valveR.open();
+            pumpR.setpwm(0);
+            if (currentPress <= P1) {
+                stateR = STATE_IDLE;
+                ble_log("R S3->S0");
+            } else if (isUserPresent) {
+                stateR = STATE_INFLATE;
+                ble_log("R S3->S1");
+            }
+            break;
+    }
+}
+
+void processLogging(unsigned long currentMillis) {
+    if (currentMillis - lastLogTime >= 500) {
+        long pressValL = pressL.getRelativeValue();
+        long pressValR = pressR.getRelativeValue();
+        int fsrValL = fsrL.readRaw();
+        int fsrValR = fsrR.readRaw();
+
+        String msg = "PL:" + String(pressValL) + " PR:" + String(pressValR) + 
+                     " FL:" + String(fsrValL) + " FR:" + String(fsrValR);
+        ble_log(msg);
+
+        lastLogTime = currentMillis;
+    }
+}
 
 void setup() {
     Serial.begin(115200);
@@ -40,69 +185,26 @@ void setup() {
 
     pumpL.begin(); pumpL.off();
     pumpR.begin(); pumpR.off();
-    valveL.begin(); valveL.close();
-    valveR.begin(); valveR.close();
+    valveL.begin(); valveL.open();
+    valveR.begin(); valveR.open();
     fsrL.begin(); fsrR.begin();
-    pressL.begin(); pressR.begin();
+    
+    pressL.begin(); pressR.begin(); 
 
     pressL.tare();
     pressR.tare();
 
-    valveL.close();
-    valveR.close();
+    stateL = STATE_IDLE;
+    stateR = STATE_IDLE;
 
-    ble_log("Started synchronous inflation...");
+    ble_log("System Ready");
 }
 
 void loop() {
-
-    if(systemState == 0){
-
-        if(is_ble_connected){
-            float seconds = millis() / 1000;
-        
-            ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
-            ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
-  
-            if(seconds > 1){
-
-                pumpL.setpwm(255);
-                pumpR.setpwm(255);
-                ble_log("[FSR]L:" + String(analogRead(PIN_FSR_L)));
-                ble_log("[FSR]R:" + String(analogRead(PIN_FSR_R)));
-                ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
-                ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
-                ble_log("+============================================+");
-            
-                if (fsrL.isPressed() || fsrR.isPressed()) {
-
-                    pumpL.setpwm(0);
-                    pumpR.setpwm(0);
-                    valveL.close();
-                    valveR.close();
-
-                    // 輸出此時的氣壓值
-                    long valL = pressL.getRelativeValue();
-                    long valR = pressR.getRelativeValue();
-                    
-                    ble_log("Critical state reac");
-                    ble_log("P L: " + String(valL) + " | P R: " + String(valR));
-
-                    systemState = 1;
-                }
-            }
-
-        else{
-            ble_log("Exit system loop and abort!!");
-            ble_log("[FSR]L:" + String(analogRead(PIN_FSR_L)));
-            ble_log("[FSR]R:" + String(analogRead(PIN_FSR_R)));
-            ble_log("[Hx]L:" + String(analogRead(PIN_HX710_OUT_L)));
-            ble_log("[Hx]R:" + String(analogRead(PIN_HX710_OUT_R)));
-            ble_log("+============================================+");
-
-            }
-
-        }
-
-    }
+    ble_loop();
+    unsigned long currentMillis = millis();
+    
+    processSideL();
+    processSideR();
+    processLogging(currentMillis);
 }
