@@ -16,9 +16,9 @@ const int PIN_HX710_SCK_L = 18;
 const int PIN_HX710_OUT_R = 25;
 const int PIN_HX710_SCK_R = 22;
 
-const long P_MAX = 3350000; 
-const long P1 = P_MAX * 0.85; 
-const long P2 = P_MAX * 0.95; 
+const long P_MAX = 3350000; // 100%
+const long P1 = P_MAX; 
+const long P2 = P_MAX * 1.1; 
 //need P3?
 
 // Tolerance to prevent pump/valve chattering around target pressure, can adjust?
@@ -72,7 +72,7 @@ void processSideL() {
             if (!isUserPresent) {
                 stateL = STATE_DEFLATE;
                 ble_log("L S1->S3");
-            } else if (currentPress >= P_MAX) {
+            } else if (currentPress >= P2) {
                 stateL = STATE_HOLD;
                 ble_log("L S1->S2");
             }
@@ -131,7 +131,7 @@ void processSideR() {
             if (!isUserPresent) {
                 stateR = STATE_DEFLATE;
                 ble_log("R S1->S3");
-            } else if (currentPress >= P_MAX) {
+            } else if (currentPress >= P2) {
                 stateR = STATE_HOLD;
                 ble_log("R S1->S2");
             }
@@ -190,7 +190,7 @@ void setup() {
     fsrL.begin(); fsrR.begin();
     
     pressL.begin(); pressR.begin(); 
-    delay(2000); 
+
     pressL.tare();
     pressR.tare();
 

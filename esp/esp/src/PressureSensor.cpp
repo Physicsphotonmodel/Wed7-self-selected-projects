@@ -10,7 +10,7 @@ int PressureSensor::readRaw() {
     return analogRead(_pin);
 }
 
-bool PressureSensor::isPressed() {
-    return readRaw() > 2000;
+bool PressureSensor::isPressed(int threshold) {
+    return readRaw() > threshold;
 }
 

@@ -15,14 +15,15 @@ const int PIN_HX710_OUT_L = 4;
 const int PIN_HX710_SCK_L = 18;
 const int PIN_HX710_OUT_R = 25;
 const int PIN_HX710_SCK_R = 22;
-
-const long P_MAX = 3350000; // 100%
+const int FSR_THRESHOLD_L = 150; // Adjust based on testing
+const int FSR_THRESHOLD_R = 300; // Adjust based on testing
+const long P_MAX = 100;
 const long P1 = P_MAX; 
 const long P2 = P_MAX * 1.1; 
 //need P3?
 
 // Tolerance to prevent pump/valve chattering around target pressure, can adjust?
-const long P_TOL = 30000; 
+const long P_TOL = 3; 
 
 Pump pumpL(PIN_PUMP_L);
 Pump pumpR(PIN_PUMP_R);
@@ -47,7 +48,7 @@ unsigned long lastLogTime = 0;
 
 void processSideL() {
     long currentPress = pressL.getRelativeValue();
-    bool isUserPresent = fsrL.isPressed();
+    bool isUserPresent = fsrL.isPressed(FSR_THRESHOLD_L);
 
     switch (stateL) {
         case STATE_IDLE:
@@ -56,19 +57,19 @@ void processSideL() {
                 ble_log("L S0->S1");
             } else if (currentPress < (P1 - P_TOL)) {
                 valveL.close();
-                pumpL.setpwm(255);
+                pumpL.on();
             } else if (currentPress > (P1 + P_TOL)) {
                 valveL.open();
-                pumpL.setpwm(0);
+                pumpL.off();
             } else {
                 valveL.close();
-                pumpL.setpwm(0);
+                pumpL.off();
             }
             break;
 
         case STATE_INFLATE:
             valveL.close();
-            pumpL.setpwm(255);
+            pumpL.on();
             if (!isUserPresent) {
                 stateL = STATE_DEFLATE;
                 ble_log("L S1->S3");
@@ -80,7 +81,7 @@ void processSideL() {
 
         case STATE_HOLD:
             valveL.close();
-            pumpL.setpwm(0);
+            pumpL.off();
             if (!isUserPresent) {
                 stateL = STATE_DEFLATE;
                 ble_log("L S2->S3");
@@ -92,7 +93,7 @@ void processSideL() {
 
         case STATE_DEFLATE:
             valveL.open();
-            pumpL.setpwm(0);
+            pumpL.off();
             if (currentPress <= P1) {
                 stateL = STATE_IDLE;
                 ble_log("L S3->S0");
@@ -106,7 +107,7 @@ void processSideL() {
 
 void processSideR() {
     long currentPress = pressR.getRelativeValue();
-    bool isUserPresent = fsrR.isPressed();
+    bool isUserPresent = fsrR.isPressed(FSR_THRESHOLD_R);
 
     switch (stateR) {
         case STATE_IDLE:
@@ -115,19 +116,19 @@ void processSideR() {
                 ble_log("R S0->S1");
             } else if (currentPress < (P1 - P_TOL)) {
                 valveR.close();
-                pumpR.setpwm(255);
+                pumpR.on();
             } else if (currentPress > (P1 + P_TOL)) {
                 valveR.open();
-                pumpR.setpwm(0);
+                pumpR.off();
             } else {
                 valveR.close();
-                pumpR.setpwm(0);
+                pumpR.off();
             }
             break;
 
         case STATE_INFLATE:
             valveR.close();
-            pumpR.setpwm(255);
+            pumpR.on();
             if (!isUserPresent) {
                 stateR = STATE_DEFLATE;
                 ble_log("R S1->S3");
@@ -139,7 +140,7 @@ void processSideR() {
 
         case STATE_HOLD:
             valveR.close();
-            pumpR.setpwm(0);
+            pumpR.off();
             if (!isUserPresent) {
                 stateR = STATE_DEFLATE;
                 ble_log("R S2->S3");
@@ -151,7 +152,7 @@ void processSideR() {
 
         case STATE_DEFLATE:
             valveR.open();
-            pumpR.setpwm(0);
+            pumpR.off();
             if (currentPress <= P1) {
                 stateR = STATE_IDLE;
                 ble_log("R S3->S0");
@@ -170,8 +171,8 @@ void processLogging(unsigned long currentMillis) {
         int fsrValL = fsrL.readRaw();
         int fsrValR = fsrR.readRaw();
 
-        String msg = "PL:" + String(pressValL) + " PR:" + String(pressValR) + 
-                     " FL:" + String(fsrValL) + " FR:" + String(fsrValR);
+        String msg = String(pressValL) + "/" + String(pressValR) + 
+                     "/" + String(fsrValL) + "/" + String(fsrValR);
         ble_log(msg);
 
         lastLogTime = currentMillis;
